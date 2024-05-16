@@ -1,6 +1,7 @@
 import express from "express";
 import bodyParser from "body-parser";
 import cors from "cors";
+import mysql from "mysql2/promise";
 
 type User = { id: number; username: string; password: string };
 type Account = { id: number; userId: number; balance: number };
@@ -20,35 +21,81 @@ function generateOTP() {
   return otp.toString();
 }
 
-const users: User[] = [];
-const accounts: Account[] = [];
-const sessions: Session[] = [];
-
-const GetAuthToken = (request: any) => {
+const GetAuthTokenFromHeader = (request: any) => {
   return request.headers.authorization?.replace(/\D/g, "");
 };
 
-// Din kod här. Skriv dina routes:
+// Database connection
+const pool = mysql.createPool({
+  host: "localhost",
+  user: "root",
+  password: "root",
+  database: "banksajt",
+  port: 3306,
+});
+
+// Database query helper
+async function query(sql: any, params: any) {
+  const [results] = await pool.execute(sql, params);
+  return results;
+}
+
+// Endpoints:
 app.post("/users", async (request, response) => {
   const { username, password } = request.body;
+  let userId;
 
   try {
-    users.push({ id: 0, username: username, password: password });
-    accounts.push({ id: 0, userId: users[users.length - 1].id, balance: 0 });
-    response.status(201).send(`User ${username} created`);
-    // console.log(users);
-    // console.log(accounts);
+    const result = await query(
+      "INSERT INTO users (username, password) VALUES (?, ?)",
+      [username, password]
+    );
+
+    userId = (result as any).insertId;
   } catch (error) {
     console.error(error);
     response.status(500).send("Error creating user. " + error);
+    return;
+  }
+
+  try {
+    await query("INSERT INTO accounts (userId) VALUES (?)", [userId]);
+
+    response.status(201).send(`User created`);
+  } catch (error) {
+    console.error(error);
+    response.status(500).send("Error creating account for user. " + error);
   }
 });
 
 app.post("/sessions", async (request, response) => {
+  const { username, password } = request.body;
+
   try {
-    sessions.push({ userId: 0, token: generateOTP() });
-    response.status(200).send({ token: sessions[sessions.length - 1].token });
-    // console.log(sessions);
+    const result = (await query(
+      "SELECT * FROM users WHERE username = ? AND password = ?",
+      [username, password]
+    )) as User[];
+    if (result.length < 1) throw new Error("No user found");
+
+    const user: User = result[0];
+    const token = generateOTP();
+    const sessions = (await query("SELECT * FROM sessions WHERE userId = ?", [
+      user.id,
+    ])) as Session[];
+    if (sessions.length < 1) {
+      await query("INSERT INTO sessions (userId, token) VALUES(?, ?)", [
+        user.id,
+        token,
+      ]);
+    } else {
+      await query("UPDATE sessions SET token = ? WHERE userId = ?", [
+        token,
+        user.id,
+      ]);
+    }
+
+    response.status(200).send({ token: token });
   } catch (error) {
     console.error(error);
     response.status(500).send("Error signing in. " + error);
@@ -57,14 +104,19 @@ app.post("/sessions", async (request, response) => {
 
 app.post("/me/account", async (request, response) => {
   try {
-    const sessionToken = GetAuthToken(request);
-    const session = sessions.find((session) => session.token == sessionToken);
-    if (!session) throw new Error("No session found.");
+    //TODO: (display name) ALSO SEND NAME AND SAY HELLO
+    const sessionToken = GetAuthTokenFromHeader(request);
+    const sessions = (await query("SELECT * FROM sessions WHERE token = ?", [
+      sessionToken,
+    ])) as Session[];
+    if (sessions.length < 0) throw new Error("No session found.");
+    const session = sessions[0];
 
-    const account = accounts.find(
-      (account) => account.userId == session.userId
-    );
-    if (!account) throw new Error("No account found.");
+    const accounts = (await query("SELECT * FROM accounts WHERE userID = ?", [
+      session.userId,
+    ])) as Account[];
+    if (accounts.length < 1) throw new Error("No account found.");
+    const account = accounts[0];
 
     response.status(200).send({ balance: account.balance });
   } catch (error) {
@@ -77,16 +129,24 @@ app.post("/me/account/transaction", async (request, response) => {
   const { amount } = request.body;
 
   try {
-    const sessionToken = GetAuthToken(request);
-    const session = sessions.find((session) => session.token == sessionToken);
-    if (!session) throw new Error("No session found.");
+    const sessionToken = GetAuthTokenFromHeader(request);
+    const sessions = (await query("SELECT * FROM sessions WHERE token = ?", [
+      sessionToken,
+    ])) as Session[];
+    if (sessions.length < 0) throw new Error("No session found.");
+    const session = sessions[0];
 
-    const account = accounts.find(
-      (account) => account.userId == session.userId
-    );
-    if (!account) throw new Error("No account found.");
+    const accounts = (await query("SELECT * FROM accounts WHERE userID = ?", [
+      session.userId,
+    ])) as Account[];
+    if (accounts.length < 1) throw new Error("No account found.");
+    const account = accounts[0];
 
     account.balance += amount;
+    await query("UPDATE accounts SET balance = ? WHERE userId = ?", [
+      account.balance,
+      account.userId,
+    ]);
 
     response.status(200).send({ balance: account.balance });
   } catch (error) {
