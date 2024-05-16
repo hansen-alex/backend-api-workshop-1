@@ -1,10 +1,17 @@
-import { useState } from "react";
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 function CreateUserPage() {
-  const [username, setUsername] = useState<string>("Alex");
-  const [password, setPassword] = useState<string>("password123");
+  const navigate = useNavigate();
+  const [username, setUsername] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
 
-  const handleSignUp = async () => {
+  const handleSignUp = async (
+    event: React.MouseEvent<HTMLButtonElement, MouseEvent>
+  ) => {
+    event.preventDefault();
+    if (username.length < 1 || password.length < 1) return;
+
     try {
       const response = await fetch("http://localhost:3000/users", {
         method: "POST",
@@ -17,15 +24,14 @@ function CreateUserPage() {
         }),
       });
 
-      if (!response.ok) throw new Error("Fel användarnamn eller lösenord");
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message);
+      }
 
-      const data = await response.json();
-      console.log("response ok", data);
-      alert(
-        `User ${data.user.username} created and account with balance ${data.account.balance} created`
-      );
+      navigate("/login");
     } catch (error) {
-      console.error("Error:", error);
+      console.error(error);
     }
   };
 

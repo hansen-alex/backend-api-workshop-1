@@ -2,10 +2,9 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 function LoginPage() {
-  const [username, setUsername] = useState<string>("Alex");
-  const [password, setPassword] = useState<string>("password123");
-
-  let navigate = useNavigate();
+  const navigate = useNavigate();
+  const [username, setUsername] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
 
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault(); // Prevent the default form submission

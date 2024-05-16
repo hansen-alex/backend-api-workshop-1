@@ -46,22 +46,26 @@ app.post("/users", async (request, response) => {
   let userId;
 
   try {
+    const users = (await query("SELECT * FROM users WHERE username = ?", [username]) as User[]);
+    if(users.length > 0) throw { status: 409, message: "Username already occupied. " };
+
     const result = await query(
       "INSERT INTO users (username, password) VALUES (?, ?)",
       [username, password]
     );
 
     userId = (result as any).insertId;
-  } catch (error) {
-    console.error(error);
-    response.status(500).send("Error creating user. " + error);
+  } catch (error: any) {
+    console.log(error);
+    
+    response.status(error.status).send({ message: "Creating user. " + error.message });
     return;
   }
 
   try {
     await query("INSERT INTO accounts (userId) VALUES (?)", [userId]);
 
-    response.status(201).send(`User created`);
+    response.status(201).send({ message: "User created" });
   } catch (error) {
     console.error(error);
     response.status(500).send("Error creating account for user. " + error);
@@ -104,21 +108,24 @@ app.post("/sessions", async (request, response) => {
 
 app.post("/me/account", async (request, response) => {
   try {
-    //TODO: (display name) ALSO SEND NAME AND SAY HELLO
     const sessionToken = GetAuthTokenFromHeader(request);
     const sessions = (await query("SELECT * FROM sessions WHERE token = ?", [
       sessionToken,
     ])) as Session[];
-    if (sessions.length < 0) throw new Error("No session found.");
+    if (sessions.length < 1) throw new Error("No session found.");
     const session = sessions[0];
-
+    
     const accounts = (await query("SELECT * FROM accounts WHERE userID = ?", [
       session.userId,
     ])) as Account[];
     if (accounts.length < 1) throw new Error("No account found.");
     const account = accounts[0];
+    
+    const users = (await query("SELECT * FROM users WHERE id = ?", [session.userId]) as User[]);
+    if(users.length < 1) throw new Error("No user found.")
+    const user = users[0];
 
-    response.status(200).send({ balance: account.balance });
+    response.status(200).send({ username: user.username, balance: account.balance });
   } catch (error) {
     console.error(error);
     response.status(500).send("Error fetching account. " + error);

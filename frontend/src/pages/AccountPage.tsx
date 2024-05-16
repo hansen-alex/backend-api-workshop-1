@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 function AccountPage() {
+  const navigate = useNavigate();
+  const [username, setUsername] = useState<string>("");
   const [balance, setBalance] = useState<number>(0);
   const [depositAmount, setDepositAmount] = useState<number>(0);
 
@@ -23,9 +26,11 @@ function AccountPage() {
       if (!response.ok) throw response;
 
       const data = await response.json();
+      setUsername(data.username);
       setBalance(data.balance);
     } catch (error) {
       console.error("Error:", error);
+      navigate("/login");
     }
   };
 
@@ -50,6 +55,7 @@ function AccountPage() {
       if (!response.ok) throw response;
 
       fetchAccountBalance();
+      setDepositAmount(0);
     } catch (error) {
       console.error("Error:", error);
     }
@@ -57,7 +63,7 @@ function AccountPage() {
 
   return (
     <div className="mt-10 sm:mx-auto sm:w-full sm:max-w-sm">
-      <h1 className="mb-10 text-3xl">Ditt konto</h1>
+      <h1 className="mb-10 text-3xl">Hej {username}</h1>
       <div className="flex flex-col gap-5 text-lg">
         <p>
           <span>Saldo:</span> {balance} kronor
